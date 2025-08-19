@@ -12,7 +12,7 @@ class OpenRouterClient:
     """
     A client for interacting with the OpenRouter API.
     """
-    def _init_(self, api_key: str):
+    def __init__(self, api_key: str):
         """
         Initializes the OpenRouterClient with the given API key.
 
