@@ -1,0 +1,10 @@
+uvicorn
+httpx
+jinja2
+python-dotenv
+requests
+pydantic
+duckduckgo-search
+lxml
+python-multipart
+openrouter
