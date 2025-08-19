@@ -8,3 +8,4 @@ duckduckgo-search
 lxml
 python-multipart
 openrouter
+fastapi
