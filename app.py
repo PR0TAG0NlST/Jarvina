@@ -30,6 +30,7 @@ EMOTIONAL_MODEL = "openai/gpt-4o"
 ANALYSIS_MODEL = "anthropic/claude-3-sonnet"
 CODING_MODEL = "google/gemini-pro"
 GENERAL_CHAT_MODEL = "mistralai/mistral-7b-instruct-v0.2"
+NEW_DEFAULT_MODEL = "openai/gpt-4o" # New default model as per your request
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -147,6 +148,17 @@ class ChatRequest(BaseModel):
 class CustomInstructionsRequest(BaseModel):
     instructions: str
 
+# Define the comprehensive fallback model list
+# The order here is crucial for the fallback system
+ALL_FALLBACK_MODELS = [
+    "openai/gpt-4o",
+    "google/gemini-pro",
+    "anthropic/claude-3-sonnet",
+    "meta-llama/llama-3-8b-instruct",
+    "deepseek/deepseek-coder",
+    "mistralai/mistral-7b-instruct-v0.2",
+]
+
 # --- GENERAL CHAT ENDPOINT FOR CLONE ---
 @app.post("/api/chat/mistral/")
 async def chat_endpoint(chat_request: ChatRequest):
@@ -236,7 +248,7 @@ async def chat_endpoint(chat_request: ChatRequest):
     # --- Prepare initial system message content based on persona data ---
     # This block was moved here to ensure system_content_parts is always initialized
     # before any conditional appends.
-    # The previous system_content_parts = [] was removed from here.
+    # The previous `system_content_parts = []` was removed from here.
 
     # Load custom instructions and add them to the system message
     custom_instructions = load_custom_instructions_from_file()
@@ -300,58 +312,58 @@ async def chat_endpoint(chat_request: ChatRequest):
     is_search_query = normalized_user_input.startswith("search for ") or normalized_user_input.startswith("what is ") or normalized_user_input.startswith("find out about ")
 
     # Define the primary intent and initial model/temp/tokens
-    # Default to 2600 tokens as per user's request, unless explicitly overridden
-    max_tokens_to_use = 2600
-    model_to_use = GENERAL_CHAT_MODEL # Default model
+    # Default to 4000 tokens as per your request
+    max_tokens_to_use = 4000
+    model_to_use = NEW_DEFAULT_MODEL # Default model
     temperature_to_use = 0.7 # Default temperature
 
     # --- Intent Prioritization and Model/Token Assignment ---
     # Prioritize search queries if detected
     if is_search_query:
-        model_to_use = GENERAL_CHAT_MODEL # Or a more factual model if preferred
+        model_to_use = NEW_DEFAULT_MODEL # Or a more factual model if preferred
         temperature_to_use = 0.4 # Less creative, more factual for search results
-        logging.info("Detected search query. Using GENERAL_CHAT_MODEL for factual response based on search results.")
+        logging.info("Detected search query. Using NEW_DEFAULT_MODEL for factual response based on search results.")
         system_content_parts.append("You have been provided with DuckDuckGo search results. Please synthesize this information to answer the user's question concisely and accurately. If no relevant information is found, state that you couldn't find a direct answer based on the search.")
     elif is_heard_only:
-        model_to_use = EMOTIONAL_MODEL
+        model_to_use = NEW_DEFAULT_MODEL
         temperature_to_use = 0.9 # More creative/empathetic for pure listening
-        logging.info("Detected 'HEARD_ONLY' intent. Using EMOTIONAL_MODEL for empathy.")
-        system_content_parts.append("When responding to emotional expressions where the user primarily wants to be heard, prioritize active listening, empathy, and validation. Acknowledge their feelings without immediately offering advice or solutions. Your goal is to make the user feel heard and understood. Keep responses concise and supportive, aiming for a comprehensive response within the allocated token budget (up to 2600 tokens).")
+        logging.info("Detected 'HEARD_ONLY' intent. Using NEW_DEFAULT_MODEL for empathy.")
+        system_content_parts.append("When responding to emotional expressions where the user primarily wants to be heard, prioritize active listening, empathy, and validation. Acknowledge their feelings without immediately offering advice or solutions. Your goal is to make the user feel heard and understood. Keep responses concise and supportive, aiming for a comprehensive response within the allocated token budget (up to 4000 tokens).")
     elif is_emotional_general and is_reply_expected: # "long yet emotional" from RTF, or emotional question
-        model_to_use = EMOTIONAL_MODEL # Use emotional model for empathetic tone
+        model_to_use = NEW_DEFAULT_MODEL # Use emotional model for empathetic tone
         temperature_to_use = 0.7 # Balanced: empathetic but also factual/explanatory
-        logging.info("Detected 'HYBRID' (emotional + reply expected) intent. Using EMOTIONAL_MODEL.")
-        system_content_parts.append("When responding to questions that blend emotional expression with a request for explanation or insight, balance empathy and validation with providing clear, thoughtful, and detailed information. Acknowledge the user's feelings first, then offer the requested explanation or perspective in a supportive tone. Strive for a comprehensive and detailed response, utilizing the full allocated token budget (up to 2600 tokens).")
+        logging.info("Detected 'HYBRID' (emotional + reply expected) intent. Using NEW_DEFAULT_MODEL.")
+        system_content_parts.append("When responding to questions that blend emotional expression with a request for explanation or insight, balance empathy and validation with providing clear, thoughtful, and detailed information. Acknowledge the user's feelings first, then offer the requested explanation or perspective in a supportive tone. Strive for a comprehensive and detailed response, utilizing the full allocated token budget (up to 4000 tokens).")
     elif is_emotional_general: # General emotional expression, not explicitly "heard only" or a question
-        model_to_use = EMOTIONAL_MODEL
+        model_to_use = NEW_DEFAULT_MODEL
         temperature_to_use = 0.8 # More creative/empathetic
-        logging.info("Detected general emotional query. Using EMOTIONAL_MODEL for empathy.")
-        system_content_parts.append("When responding to emotional expressions, prioritize active listening, empathy and validation. Acknowledge the user's feelings before offering any advice or solutions. Your goal is to make the user feel heard and understood. You may offer gentle, supportive suggestions if appropriate after validation. Aim for a comprehensive response within the allocated token budget (up to 2600 tokens).")
+        logging.info("Detected general emotional query. Using NEW_DEFAULT_MODEL for empathy.")
+        system_content_parts.append("When responding to emotional expressions, prioritize active listening, empathy and validation. Acknowledge the user's feelings before offering any advice or solutions. Your goal is to make the user feel heard and understood. You may offer gentle, supportive suggestions if appropriate after validation. Aim for a comprehensive response within the allocated token budget (up to 4000 tokens).")
     elif is_analysis_query:
-        model_to_use = ANALYSIS_MODEL
+        model_to_use = NEW_DEFAULT_MODEL
         temperature_to_use = 0.2 # More factual/less creative
-        logging.info("Detected analysis query. Using ANALYSIS_MODEL.")
-        system_content_parts.append("Provide a comprehensive and detailed analysis, utilizing the full allocated token budget (up to 2600 tokens) to ensure thoroughness.")
+        logging.info("Detected analysis query. Using NEW_DEFAULT_MODEL.")
+        system_content_parts.append("Provide a comprehensive and detailed analysis, utilizing the full allocated token budget (up to 4000 tokens) to ensure thoroughness.")
     elif is_coding_query:
-        model_to_use = CODING_MODEL
+        model_to_use = NEW_DEFAULT_MODEL
         temperature_to_use = 0.1 # More precise/less creative
-        logging.info("Detected coding query. Using CODING_MODEL.")
-        system_content_parts.append("Provide detailed code examples and explanations, utilizing the full allocated token budget (up to 2600 tokens) to ensure clarity and completeness.")
+        logging.info("Detected coding query. Using NEW_DEFAULT_MODEL.")
+        system_content_parts.append("Provide detailed code examples and explanations, utilizing the full allocated token budget (up to 4000 tokens) to ensure clarity and completeness.")
     elif is_reply_expected: # This covers general informational questions
-        model_to_use = GENERAL_CHAT_MODEL # Informational queries use the new default (Mistral)
+        model_to_use = NEW_DEFAULT_MODEL # Informational queries use the new default (Mistral)
         temperature_to_use = 0.6 # Slightly less creative for factual info
         logging.info(f"Detected informational query. Using {model_to_use}.")
-        system_content_parts.append("Provide a clear, structured, and comprehensive explanation. Utilize the full allocated token budget (up to 2600 tokens) to ensure thoroughness and depth in your response.")
-    else: # Default for normal conversations, now also aiming for 2600 tokens
-        model_to_use = GENERAL_CHAT_MODEL # General chat uses the new default (Mistral)
+        system_content_parts.append("Provide a clear, structured, and comprehensive explanation. Utilize the full allocated token budget (up to 4000 tokens) to ensure thoroughness and depth in your response.")
+    else: # Default for normal conversations, now also aiming for 4000 tokens
+        model_to_use = NEW_DEFAULT_MODEL # General chat uses the new default (Mistral)
         temperature_to_use = 0.7
-        logging.info(f"Detected general chat. Using {model_to_use} with 2600 max_tokens.")
-        system_content_parts.append("Provide a comprehensive and detailed response, utilizing the full allocated token budget (up to 2600 tokens) if necessary to ensure thoroughness.")
+        logging.info(f"Detected general chat. Using {model_to_use} with 4000 max_tokens.")
+        system_content_parts.append("Provide a comprehensive and detailed response, utilizing the full allocated token budget (up to 4000 tokens) if necessary to ensure thoroughness.")
 
     # Apply explicit token request override (if any)
     # This override happens AFTER intent-based model selection, ensuring user's explicit request takes precedence
     if explicit_token_request is not None:
-        max_tokens_to_use = max(200, min(explicit_token_request, 2600)) # Max to 2600
+        max_tokens_to_use = max(200, min(explicit_token_request, 4000)) # Max to 4000
         logging.info(f"Overriding max_tokens to explicit request: {max_tokens_to_use}")
 
     # Construct the final system message
@@ -372,19 +384,26 @@ async def chat_endpoint(chat_request: ChatRequest):
     logging.info(f"Final Model: {model_to_use}, Temp: {temperature_to_use}, Max Tokens: {max_tokens_to_use}")
     logging.info(f"Messages sent to LLM: {final_messages_for_llm}")
 
-    try:
-        response_content = openrouter_client.generate_text(
-            model=model_to_use,
-            messages=final_messages_for_llm,
-            temperature=temperature_to_use,
-            max_tokens=max_tokens_to_use,
-            fallback_model=FAIL_SAFE_MODEL
-        )
-        return JSONResponse(content={"response": response_content})
+    # Define the ordered list of models to try for this endpoint
+    models_to_try = [model_to_use] + [m for m in ALL_FALLBACK_MODELS if m != model_to_use]
 
-    except Exception as e:
-        logging.error(f"Error during AI generation for /api/chat/mistral/: {e}")
-        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+    for model in models_to_try:
+        try:
+            logging.info(f"Attempting to use model: {model}")
+            response_content = openrouter_client.generate_text(
+                model=model,
+                messages=final_messages_for_llm,
+                temperature=temperature_to_use,
+                max_tokens=max_tokens_to_use,
+            )
+            logging.info(f"Successfully generated response with model: {model}")
+            return JSONResponse(content={"response": response_content})
+        except Exception as e:
+            logging.error(f"Error occurred with model {model}: {e}")
+            if model == models_to_try[-1]:
+                # If this is the last model in the list and it failed, raise the final exception
+                logging.error("All model fallbacks failed. Raising final exception.")
+                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
 
 
 # --- New Endpoints for Custom Instructions ---
@@ -430,36 +449,59 @@ async def emotional_talk_endpoint(request: Request, prompt: str = Form(...)):
         f"Ensure the suggestions are helpful, empathetic, and actionable. "
     )
     
-    response_text = openrouter_client.generate_text(
-        model=EMOTIONAL_MODEL,
-        messages=[{"role": "user", "content": emotional_prompt_content}], # Use the enhanced prompt
-        temperature=0.8,
-        max_tokens=2600, # Remains 2600
-        fallback_model=FAIL_SAFE_MODEL
-    )
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "emotional_response": response_text,
-        "emotional_prompt": prompt
-    })
+    # Define the ordered list of models to try, starting with the intent-specific model
+    models_to_try = [EMOTIONAL_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != EMOTIONAL_MODEL]
+
+    for model in models_to_try:
+        try:
+            logging.info(f"Attempting to use model: {model}")
+            response_text = openrouter_client.generate_text(
+                model=model,
+                messages=[{"role": "user", "content": emotional_prompt_content}], # Use the enhanced prompt
+                temperature=0.8,
+                max_tokens=4000,
+            )
+            logging.info(f"Successfully generated response with model: {model}")
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "emotional_response": response_text,
+                "emotional_prompt": prompt
+            })
+        except Exception as e:
+            logging.error(f"Error occurred with model {model}: {e}")
+            if model == models_to_try[-1]:
+                logging.error("All model fallbacks failed. Raising final exception.")
+                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
 
 @app.post("/data_analysis", response_class=HTMLResponse)
 async def data_analysis_endpoint(request: Request, prompt: str = Form(...)):
     if openrouter_client is None:
         raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
     messages = [{"role": "user", "content": prompt}]
-    response_text = openrouter_client.generate_text(
-        model=ANALYSIS_MODEL,
-        messages=messages,
-        temperature=0.2,
-        max_tokens=2600, # Remains 2600
-        fallback_model=FAIL_SAFE_MODEL
-    )
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "analysis_response": response_text,
-        "analysis_prompt": prompt
-    })
+    
+    # Define the ordered list of models to try, starting with the intent-specific model
+    models_to_try = [ANALYSIS_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != ANALYSIS_MODEL]
+
+    for model in models_to_try:
+        try:
+            logging.info(f"Attempting to use model: {model}")
+            response_text = openrouter_client.generate_text(
+                model=model,
+                messages=messages,
+                temperature=0.2,
+                max_tokens=4000,
+            )
+            logging.info(f"Successfully generated response with model: {model}")
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "analysis_response": response_text,
+                "analysis_prompt": prompt
+            })
+        except Exception as e:
+            logging.error(f"Error occurred with model {model}: {e}")
+            if model == models_to_try[-1]:
+                logging.error("All model fallbacks failed. Raising final exception.")
+                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
 
 @app.post("/coding_help", response_class=HTMLResponse)
 async def coding_help_endpoint(request: Request, prompt: str = Form(...)):
@@ -467,15 +509,27 @@ async def coding_help_endpoint(request: Request, prompt: str = Form(...)):
     if openrouter_client is None: 
         raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
     messages = [{"role": "user", "content": prompt}]
-    response_text = openrouter_client.generate_text(
-        model=CODING_MODEL,
-        messages=messages,
-        temperature=0.1,
-        max_tokens=2600, # Remains 2600
-        fallback_model=FAIL_SAFE_MODEL # Corrected typo here
-    )
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "coding_response": response_text,
-        "coding_prompt": prompt
-    })
+
+    # Define the ordered list of models to try, starting with the intent-specific model
+    models_to_try = [CODING_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != CODING_MODEL]
+
+    for model in models_to_try:
+        try:
+            logging.info(f"Attempting to use model: {model}")
+            response_text = openrouter_client.generate_text(
+                model=model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=4000,
+            )
+            logging.info(f"Successfully generated response with model: {model}")
+            return templates.TemplateResponse("index.html", {
+                "request": request,
+                "coding_response": response_text,
+                "coding_prompt": prompt
+            })
+        except Exception as e:
+            logging.error(f"Error occurred with model {model}: {e}")
+            if model == models_to_try[-1]:
+                logging.error("All model fallbacks failed. Raising final exception.")
+                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
