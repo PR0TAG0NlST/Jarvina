@@ -429,7 +429,7 @@
          */
         function appendMessage(content, senderClass, toHistory = true) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = flex ${senderClass === 'user-message' ? 'justify-end' : 'justify-start'};
+            messageDiv.className = `flex ${senderClass === 'user-message' ? 'justify-end' : 'justify-start'}`;
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = senderClass;
             bubbleDiv.textContent = content;
@@ -494,7 +494,7 @@
             } else {
                 chatHistory.forEach(msg => {
                     const messageDiv = document.createElement('div');
-                    messageDiv.className = flex ${msg.senderClass === 'user-message' ? 'justify-end' : 'justify-start'};
+                    messageDiv.className = `flex ${msg.senderClass === 'user-message' ? 'justify-end' : 'justify-start'}`;
                     const bubbleDiv = document.createElement('div');
                     bubbleDiv.className = msg.senderClass;
                     bubbleDiv.textContent = msg.content;
@@ -528,7 +528,7 @@
             localStorage.removeItem(HISTORY_STORAGE_KEY); // Clear local storage history
             console.log('showChat: New chat initiated. All history cleared from display and localStorage.');
             
-            // Add the initial AI message for a new chat and save it to the new history
+            // Add the initial AI message for a new chat and save it to the *new* history
             appendMessage('Hello Pranav, I am Jarvina your personal AI assistant. How can I assist you today?', 'ai-message', true);
             userMessageInput.value = ''; // Also clear the input field
 
@@ -590,7 +590,7 @@
                     // Append messages to chatArea without re-saving them to history
                     // We pass 'false' for toHistory because these are already in chatHistory
                     const messageDiv = document.createElement('div');
-                    messageDiv.className = flex ${msg.senderClass === 'user-message' ? 'justify-end' : 'justify-start'};
+                    messageDiv.className = `flex ${msg.senderClass === 'user-message' ? 'justify-end' : 'justify-start'}`;
                     const bubbleDiv = document.createElement('div');
                     bubbleDiv.className = msg.senderClass;
                     bubbleDiv.textContent = msg.content;
@@ -637,7 +637,7 @@
                     if (response.ok) {
                         appendMessage(data.response, 'ai-message'); // This will save to history
                     } else {
-                        appendMessage(Error: ${data.detail || 'Something went wrong.'}, 'ai-message');
+                        appendMessage(`Error: ${data.detail || 'Something went wrong.'}`, 'ai-message');
                         console.error('sendMessageButton: API Error:', data);
                     }
                 } catch (error) {
@@ -668,7 +668,7 @@
             if (files.length > 0) {
                 console.log('fileInput: Files selected:', files);
                 let fileNames = Array.from(files).map(file => file.name).join(', ');
-                appendMessage(Selected files: ${fileNames}, 'user-message');
+                appendMessage(`Selected files: ${fileNames}`, 'user-message');
             }
         });
 
@@ -690,7 +690,7 @@
                 droppedFiles = Array.from(files);
                 console.log('messageInputArea: Files dropped:', droppedFiles);
                 let fileNames = droppedFiles.map(file => file.name).join(', ');
-                appendMessage(Dropped files: ${fileNames}, 'user-message');
+                appendMessage(`Dropped files: ${fileNames}`, 'user-message');
             }
         });
 
@@ -806,7 +806,7 @@
                     customInstructionsStatus.textContent = data.message;
                     customInstructionsStatus.style.color = 'green';
                 } else {
-                    customInstructionsStatus.textContent = Error: ${data.detail || 'Failed to save instructions.'};
+                    customInstructionsStatus.textContent = `Error: ${data.detail || 'Failed to save instructions.'}`;
                     customInstructionsStatus.style.color = 'red';
                 }
             } catch (error) {
