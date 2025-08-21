@@ -1,36 +1,27 @@
 import os
 import json
 import re
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict
-from openrouter_client import OpenRouterClient
-from dotenv import load_dotenv
 from typing import Optional, Union
 from datetime import datetime
-import logging
 
-# Import DDGS from duckduckgo_search
-from duckduckgo_search import DDGS
+# Import the new GeminiClient from the updated llm_client.py
+from llm_client import GeminiClient
 
 # Load environment variables from .env file
+from dotenv import load_dotenv
 load_dotenv()
 
-# Initialize FastAPI app
-openrouter_client: Optional[OpenRouterClient] = None
-jarvina_persona_data: Optional[dict] = None # Global variable to store loaded persona data
-custom_replies_map: dict = {} # Global variable to store custom replies for quick lookup
-CUSTOM_INSTRUCTIONS_FILE = "custom_instructions.json" # File to store custom instructions
-
-# Define models for different use cases
-FAIL_SAFE_MODEL = "mistralai/mistral-7b-instruct-v0.2"
-EMOTIONAL_MODEL = "openai/gpt-4o"
-ANALYSIS_MODEL = "anthropic/claude-3-sonnet"
-CODING_MODEL = "google/gemini-pro"
-GENERAL_CHAT_MODEL = "mistralai/mistral-7b-instruct-v0.2"
-NEW_DEFAULT_MODEL = "openai/gpt-4o" # New default model as per your request
+# Initialize FastAPI app and global client
+gemini_client: Optional[GeminiClient] = None
+jarvina_persona_data: Optional[dict] = None
+custom_replies_map: dict = {}
+CUSTOM_INSTRUCTIONS_FILE = "custom_instructions.json"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,9 +33,9 @@ def normalize_text(text: str) -> str:
     This ensures consistent matching regardless of user's input formatting.
     """
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text) # Remove punctuation (keep alphanumeric and spaces)
-    text = re.sub(r'\s+', ' ', text)    # Replace multiple spaces with a single space
-    return text.strip()                 # Remove leading/trailing spaces
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 # Function to load custom instructions from file
 def load_custom_instructions_from_file() -> str:
@@ -75,15 +66,17 @@ def save_custom_instructions_to_file(instructions: str):
 # --- Lifespan Event Handler ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global openrouter_client
+    global gemini_client
     global jarvina_persona_data
     global custom_replies_map
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY environment variable not set. Please set it in your .env file.")
-    openrouter_client = OpenRouterClient(api_key=api_key)
-    print("OpenRouterClient initialized successfully.")
+    try:
+        gemini_client = GeminiClient()
+        print("GeminiClient initialized successfully.")
+    except ValueError as e:
+        print(f"Error during client initialization: {e}")
+        gemini_client = None
+        # Consider a more graceful failure if the key is missing
 
     # Load persona data and custom replies from memory.json
     memory_file_path = "memory.json"
@@ -98,14 +91,12 @@ async def lifespan(app: FastAPI):
             else:
                 print(f"Warning: 'persona_data' not found in {memory_file_path}. Using default persona.")
 
-            # Process custom replies into a lookup map
             loaded_custom_replies = memory_data.get("custom_replies", [])
             for reply_entry in loaded_custom_replies:
                 response = reply_entry.get("response")
                 phrases = reply_entry.get("phrases", [])
                 if response and phrases:
                     for phrase in phrases:
-                        # Normalize the phrase from memory.json before storing as key
                         custom_replies_map[normalize_text(phrase)] = response
             if custom_replies_map:
                 print(f"Custom replies loaded from {memory_file_path} successfully.")
@@ -140,7 +131,7 @@ class ChatRequest(BaseModel):
     prompt: Optional[str] = None
     model: Optional[str] = None
     temperature: Optional[float] = None
-    max_tokens: Optional[int] = None # This field will now be ignored if present in chat_request
+    max_tokens: Optional[int] = None
 
     model_config = ConfigDict(extra='allow')
 
@@ -148,109 +139,37 @@ class ChatRequest(BaseModel):
 class CustomInstructionsRequest(BaseModel):
     instructions: str
 
-# Define the comprehensive fallback model list
-# The order here is crucial for the fallback system
-ALL_FALLBACK_MODELS = [
-    "openai/gpt-4o",
-    "google/gemini-pro",
-    "anthropic/claude-3-sonnet",
-    "meta-llama/llama-3-8b-instruct",
-    "deepseek/deepseek-coder",
-    "mistralai/mistral-7b-instruct-v0.2",
-]
-
-# --- GENERAL CHAT ENDPOINT FOR CLONE ---
+# --- GENERAL CHAT ENDPOINT ---
 @app.post("/api/chat/mistral/")
 async def chat_endpoint(chat_request: ChatRequest):
     """
-    Handles general chat requests from the clone, using dynamic model switching
-    and token allocation based on intent and context.
+    Handles general chat requests, dynamically adjusting the system prompt
+    and using the single Gemini model for all intents.
     """
-    if openrouter_client is None:
-        raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
+    if gemini_client is None:
+        raise HTTPException(status_code=500, detail="GeminiClient not initialized. Please check your API key.")
 
     logging.info(f"Received payload from frontend: {chat_request.model_dump_json(indent=2)}")
 
     messages_to_send = []
     user_prompt_content = ""
 
-    # Initialize frontend_system_message to None at the start of the function
-    frontend_system_message = None 
-    
-    # --- Initialize system_content_parts here, before any conditional appends ---
-    system_content_parts = [] 
-
-    if chat_request.messages is not None and len(chat_request.messages) > 0:
-        messages_to_send = chat_request.messages
-        # Get the last user message to check for commands
-        for msg in reversed(messages_to_send):
-            if msg.get("role") == "user" and msg.get("content"):
-                user_prompt_content = msg["content"]
-                break
-        # Find the frontend system message if it exists in the incoming messages
-        frontend_system_message = next((msg for msg in messages_to_send if msg.get("role") == "system"), None)
-    elif chat_request.prompt is not None and chat_request.prompt.strip() != "":
-        user_prompt_content = chat_request.prompt
-        messages_to_send = [{"role": "user", "content": chat_request.prompt}]
-    else:
-        raise HTTPException(status_code=400, detail="No valid 'messages' or 'prompt' field found in the request payload.")
-
-    # Normalize user input for custom reply and direct command matching
-    normalized_user_input = normalize_text(user_prompt_content)
-    logging.info(f"Normalized user input: '{normalized_user_input}' (Original: '{user_prompt_content}')")
-
-    # --- Extract explicit token/word request ---
-    explicit_token_request = None
-    match = re.search(r'(\d+)\s*(words|tokens)', normalized_user_input)
-    if match:
-        try:
-            explicit_token_request = int(match.group(1))
-            logging.info(f"Detected explicit token request: {explicit_token_request}")
-        except ValueError:
-            logging.warning(f"Could not parse explicit token request from '{match.group(1)}'")
-
-
-    # --- Check for custom replies first from the loaded map ---
+    # Check for custom replies first, this is a quick escape
+    normalized_user_input = normalize_text(chat_request.prompt or "")
     if normalized_user_input in custom_replies_map:
         logging.info(f"Matched custom reply for normalized input '{normalized_user_input}'")
         return JSONResponse(content={"response": custom_replies_map[normalized_user_input]})
 
-    # --- Direct Command Handling (e.g., Time and DuckDuckGo Search) ---
+    # Handle direct commands like "current time"
     if "current time" in normalized_user_input or "what time is it" in normalized_user_input or "day date and time" in normalized_user_input:
         current_time_str = datetime.now().strftime('%I:%M:%S %p on %A, %B %d, %Y')
         return JSONResponse(content={"response": f"The current time in Delhi, India is {current_time_str}."})
-    
-    # --- DuckDuckGo Search Integration ---
-    if normalized_user_input.startswith("search for ") or normalized_user_input.startswith("what is ") or normalized_user_input.startswith("find out about "):
-        query = normalized_user_input.replace("search for ", "").replace("what is ", "").replace("find out about ", "").strip()
-        if query:
-            logging.info(f"Performing DuckDuckGo search for: {query}")
-            try:
-                # Perform the search. You can adjust max_results as needed.
-                search_results = DDGS().text(keywords=query, max_results=3)
-                
-                if search_results:
-                    # Format the results for the AI. You might want to refine this.
-                    formatted_results = "\n\n".join([f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}" for r in search_results])
-                    
-                    # Add search results to system_content_parts to inform the LLM
-                    system_content_parts.append(f"I have performed a DuckDuckGo search for '{query}'. Here are the top results. Please use this information to answer the user's question, citing the source if appropriate:\n\n{formatted_results}")
-                    
-                    logging.info("DuckDuckGo search results integrated into system message.")
-                else:
-                    system_content_parts.append(f"I performed a DuckDuckGo search for '{query}' but found no results. Please try another query or rephrase.")
-                    logging.warning(f"No DuckDuckGo search results for: {query}")
-            except Exception as e:
-                logging.error(f"Error during DuckDuckGo search: {e}")
-                system_content_parts.append("I encountered an error while trying to perform the search. Please try again.")
 
+    # Prepare initial system message content based on persona data and custom instructions
+    system_content_parts = []
+    emoji_constraint_message = "CRITICAL INSTRUCTION: ABSOLUTELY DO NOT use emojis, emoticons, or any decorative characters in your responses. Maintain a strictly formal, concise, and professional tone at all times, especially for technical or informational content. Any use of emojis will be considered a failure."
+    system_content_parts.append(emoji_constraint_message)
 
-    # --- Prepare initial system message content based on persona data ---
-    # This block was moved here to ensure system_content_parts is always initialized
-    # before any conditional appends.
-    # The previous `system_content_parts = []` was removed from here.
-
-    # Load custom instructions and add them to the system message
     custom_instructions = load_custom_instructions_from_file()
     if custom_instructions:
         system_content_parts.append(f"User's Custom Instructions: {custom_instructions}")
@@ -277,134 +196,48 @@ async def chat_endpoint(chat_request: ChatRequest):
     else:
         system_content_parts.append("You are Jarvina your personal AI assistant, designed to think alongside you, automate your world, and evolve with your ambition.")
     
-    # Add the explicit emoji constraint to the base system message (strengthened)
-    emoji_constraint_message = "CRITICAL INSTRUCTION: ABSOLUTELY DO NOT use emojis, emoticons, or any decorative characters in your responses. Maintain a strictly formal, concise, and professional tone at all times, especially for technical or informational content. Any use of emojis will be considered a failure."
-    system_content_parts.insert(0, emoji_constraint_message) # Insert at the beginning for higher priority
+    system_message_text = "\n".join(system_content_parts)
 
-    # --- Heuristics for dynamic model and token adjustment (Intent Classification) ---
-    # Calculate number of lines in user prompt (strip leading/trailing whitespace from each line)
-    user_prompt_lines = len([line for line in user_prompt_content.split('\n') if line.strip()])
-    if user_prompt_lines == 0 and user_prompt_content.strip() != "": # Handle single line inputs without newline
-        user_prompt_lines = 1
-
-    # Keywords for different intents (aligned with RTF document where possible)
-    heard_only_keywords = ["i feel", "just needed", "don’t know why", "venting", "no need to reply", "just saying", "i just want to talk", "i need to get this off my chest"]
-    reply_expected_keywords = ["what do you think", "can you tell", "why", "how", "should i", "what if", "explain", "describe", "what is", "tell me about", "elaborate", "discuss", "analyze", "provide details", "in depth", "give me information", "can you tell me", "can you explain", "define", "compare", "contrast", "implications", "effects", "impact", "significance", "describe your thoughts on", "what are your views on", "meaning of", "definition of"]
+    # Reformat messages for Gemini API
+    gemini_formatted_messages = []
     
-    emotional_keywords_general = ["feeling", "feel", "sad", "happy", "anxious", "stressed", "emotional", "how are you feeling", "depressed", "overwhelmed", "frustrated", "lonely", "joyful", "excited", "upset", "down", "confused", "worried", "scared", "angry", "hopeful", "grateful", "content", "my mood is"]
-    
-    analysis_keywords = [
-        "analyze", "data", "report", "statistics", "trend", "chart", "graph", "metrics",
-        "predict", "forecast", "correlation", "distribution", "summary", "breakdown"
-    ]
-    coding_keywords = [
-        "code", "program", "script", "function", "bug", "error", "syntax", "develop",
-        "implement", "debug", "algorithm", "language", "python", "javascript", "html", "css",
-        "java", "c++", "react", "api", "framework", "library", "class", "method", "variable"
-    ]
-
-    # --- Determine Intent Flags based on RTF logic ---
-    is_heard_only = any(keyword in normalized_user_input for keyword in heard_only_keywords)
-    is_reply_expected = any(keyword in normalized_user_input for keyword in reply_expected_keywords) or user_prompt_content.endswith("?")
-    is_emotional_general = any(keyword in normalized_user_input for keyword in emotional_keywords_general)
-    is_analysis_query = any(keyword in normalized_user_input for keyword in analysis_keywords)
-    is_coding_query = any(keyword in normalized_user_input for keyword in coding_keywords)
-    is_search_query = normalized_user_input.startswith("search for ") or normalized_user_input.startswith("what is ") or normalized_user_input.startswith("find out about ")
-
-    # Define the primary intent and initial model/temp/tokens
-    # Default to 4000 tokens as per your request
-    max_tokens_to_use = 4000
-    model_to_use = NEW_DEFAULT_MODEL # Default model
-    temperature_to_use = 0.7 # Default temperature
-
-    # --- Intent Prioritization and Model/Token Assignment ---
-    # Prioritize search queries if detected
-    if is_search_query:
-        model_to_use = NEW_DEFAULT_MODEL # Or a more factual model if preferred
-        temperature_to_use = 0.4 # Less creative, more factual for search results
-        logging.info("Detected search query. Using NEW_DEFAULT_MODEL for factual response based on search results.")
-        system_content_parts.append("You have been provided with DuckDuckGo search results. Please synthesize this information to answer the user's question concisely and accurately. If no relevant information is found, state that you couldn't find a direct answer based on the search.")
-    elif is_heard_only:
-        model_to_use = NEW_DEFAULT_MODEL
-        temperature_to_use = 0.9 # More creative/empathetic for pure listening
-        logging.info("Detected 'HEARD_ONLY' intent. Using NEW_DEFAULT_MODEL for empathy.")
-        system_content_parts.append("When responding to emotional expressions where the user primarily wants to be heard, prioritize active listening, empathy, and validation. Acknowledge their feelings without immediately offering advice or solutions. Your goal is to make the user feel heard and understood. Keep responses concise and supportive, aiming for a comprehensive response within the allocated token budget (up to 4000 tokens).")
-    elif is_emotional_general and is_reply_expected: # "long yet emotional" from RTF, or emotional question
-        model_to_use = NEW_DEFAULT_MODEL # Use emotional model for empathetic tone
-        temperature_to_use = 0.7 # Balanced: empathetic but also factual/explanatory
-        logging.info("Detected 'HYBRID' (emotional + reply expected) intent. Using NEW_DEFAULT_MODEL.")
-        system_content_parts.append("When responding to questions that blend emotional expression with a request for explanation or insight, balance empathy and validation with providing clear, thoughtful, and detailed information. Acknowledge the user's feelings first, then offer the requested explanation or perspective in a supportive tone. Strive for a comprehensive and detailed response, utilizing the full allocated token budget (up to 4000 tokens).")
-    elif is_emotional_general: # General emotional expression, not explicitly "heard only" or a question
-        model_to_use = NEW_DEFAULT_MODEL
-        temperature_to_use = 0.8 # More creative/empathetic
-        logging.info("Detected general emotional query. Using NEW_DEFAULT_MODEL for empathy.")
-        system_content_parts.append("When responding to emotional expressions, prioritize active listening, empathy and validation. Acknowledge the user's feelings before offering any advice or solutions. Your goal is to make the user feel heard and understood. You may offer gentle, supportive suggestions if appropriate after validation. Aim for a comprehensive response within the allocated token budget (up to 4000 tokens).")
-    elif is_analysis_query:
-        model_to_use = NEW_DEFAULT_MODEL
-        temperature_to_use = 0.2 # More factual/less creative
-        logging.info("Detected analysis query. Using NEW_DEFAULT_MODEL.")
-        system_content_parts.append("Provide a comprehensive and detailed analysis, utilizing the full allocated token budget (up to 4000 tokens) to ensure thoroughness.")
-    elif is_coding_query:
-        model_to_use = NEW_DEFAULT_MODEL
-        temperature_to_use = 0.1 # More precise/less creative
-        logging.info("Detected coding query. Using NEW_DEFAULT_MODEL.")
-        system_content_parts.append("Provide detailed code examples and explanations, utilizing the full allocated token budget (up to 4000 tokens) to ensure clarity and completeness.")
-    elif is_reply_expected: # This covers general informational questions
-        model_to_use = NEW_DEFAULT_MODEL # Informational queries use the new default (Mistral)
-        temperature_to_use = 0.6 # Slightly less creative for factual info
-        logging.info(f"Detected informational query. Using {model_to_use}.")
-        system_content_parts.append("Provide a clear, structured, and comprehensive explanation. Utilize the full allocated token budget (up to 4000 tokens) to ensure thoroughness and depth in your response.")
-    else: # Default for normal conversations, now also aiming for 4000 tokens
-        model_to_use = NEW_DEFAULT_MODEL # General chat uses the new default (Mistral)
-        temperature_to_use = 0.7
-        logging.info(f"Detected general chat. Using {model_to_use} with 4000 max_tokens.")
-        system_content_parts.append("Provide a comprehensive and detailed response, utilizing the full allocated token budget (up to 4000 tokens) if necessary to ensure thoroughness.")
-
-    # Apply explicit token request override (if any)
-    # This override happens AFTER intent-based model selection, ensuring user's explicit request takes precedence
-    if explicit_token_request is not None:
-        max_tokens_to_use = max(200, min(explicit_token_request, 4000)) # Max to 4000
-        logging.info(f"Overriding max_tokens to explicit request: {max_tokens_to_use}")
-
-    # Construct the final system message
-    # If frontend_system_message exists, append our parts to it
-    if frontend_system_message:
-        # Append the dynamically generated system_content_parts to the frontend's system message
-        frontend_system_message["content"] += "\n\n" + "\n".join(system_content_parts)
-        # Ensure only one system message is at the beginning
-        final_messages_for_llm = [frontend_system_message] + [msg for msg in messages_to_send if msg.get("role") != "system"]
+    # Prepend system instructions to the first user message if chat history is empty
+    if not chat_request.messages:
+        # If the request comes with just a prompt, it's a new conversation
+        full_user_prompt = f"{system_message_text}\n\n{chat_request.prompt}"
+        gemini_formatted_messages.append({
+            "role": "user",
+            "parts": [{"text": full_user_prompt}]
+        })
     else:
-        # Otherwise, create a new system message from our parts
-        default_system_message = {
-            "role": "system",
-            "content": "\n".join(system_content_parts)
-        }
-        final_messages_for_llm = [default_system_message] + messages_to_send
+        # If there's chat history, process it
+        for message in chat_request.messages:
+            role = message.get("role")
+            content = message.get("content")
 
-    logging.info(f"Final Model: {model_to_use}, Temp: {temperature_to_use}, Max Tokens: {max_tokens_to_use}")
-    logging.info(f"Messages sent to LLM: {final_messages_for_llm}")
+            if role == "system":
+                # Skip system role, as it's not supported in multi-turn conversation history
+                # This logic assumes the very first message is handled correctly
+                continue
+            elif role == "assistant":
+                # Convert "assistant" role to "model" for Gemini API compatibility
+                gemini_formatted_messages.append({"role": "model", "parts": [{"text": content}]})
+            elif role == "user":
+                # Standard user message
+                gemini_formatted_messages.append({"role": "user", "parts": [{"text": content}]})
 
-    # Define the ordered list of models to try for this endpoint
-    models_to_try = [model_to_use] + [m for m in ALL_FALLBACK_MODELS if m != model_to_use]
+    logging.info(f"Messages sent to LLM: {gemini_formatted_messages}")
 
-    for model in models_to_try:
-        try:
-            logging.info(f"Attempting to use model: {model}")
-            response_content = openrouter_client.generate_text(
-                model=model,
-                messages=final_messages_for_llm,
-                temperature=temperature_to_use,
-                max_tokens=max_tokens_to_use,
-            )
-            logging.info(f"Successfully generated response with model: {model}")
-            return JSONResponse(content={"response": response_content})
-        except Exception as e:
-            logging.error(f"Error occurred with model {model}: {e}")
-            if model == models_to_try[-1]:
-                # If this is the last model in the list and it failed, raise the final exception
-                logging.error("All model fallbacks failed. Raising final exception.")
-                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
-
+    try:
+        response_content = gemini_client.generate_content(
+            messages=gemini_formatted_messages,
+            temperature=0.7,
+        )
+        logging.info("Successfully generated response with the Gemini client.")
+        return JSONResponse(content={"response": response_content})
+    except Exception as e:
+        logging.error(f"Error occurred during Gemini generation: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 # --- New Endpoints for Custom Instructions ---
 @app.post("/api/save_custom_instructions")
@@ -432,104 +265,3 @@ async def load_custom_instructions_api():
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
-
-@app.post("/emotional_talk", response_class=HTMLResponse)
-async def emotional_talk_endpoint(request: Request, prompt: str = Form(...)):
-    if openrouter_client is None:
-        raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
-    messages = [{"role": "user", "content": prompt}]
-    
-    # Enhanced prompt for emotional talk to ensure continuous numbering
-    # Added a clear header and emphasized the numbering format
-    emotional_prompt_content = (
-        f"I'm sorry to hear that you're feeling {prompt.lower().replace('i am feeling ', '').replace('i feel ', '')}. "
-        f"It's important to remember that you're not alone and there are ways to feel more connected. "
-        f"Here are a few suggestions that might help:\n\n"
-        f"Please provide several distinct suggestions as a SINGLE, CONTINUOUS numbered list (1., 2., 3., etc.). " # Emphasized continuous numbering
-        f"Ensure the suggestions are helpful, empathetic, and actionable. "
-    )
-    
-    # Define the ordered list of models to try, starting with the intent-specific model
-    models_to_try = [EMOTIONAL_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != EMOTIONAL_MODEL]
-
-    for model in models_to_try:
-        try:
-            logging.info(f"Attempting to use model: {model}")
-            response_text = openrouter_client.generate_text(
-                model=model,
-                messages=[{"role": "user", "content": emotional_prompt_content}], # Use the enhanced prompt
-                temperature=0.8,
-                max_tokens=4000,
-            )
-            logging.info(f"Successfully generated response with model: {model}")
-            return templates.TemplateResponse("index.html", {
-                "request": request,
-                "emotional_response": response_text,
-                "emotional_prompt": prompt
-            })
-        except Exception as e:
-            logging.error(f"Error occurred with model {model}: {e}")
-            if model == models_to_try[-1]:
-                logging.error("All model fallbacks failed. Raising final exception.")
-                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
-
-@app.post("/data_analysis", response_class=HTMLResponse)
-async def data_analysis_endpoint(request: Request, prompt: str = Form(...)):
-    if openrouter_client is None:
-        raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
-    messages = [{"role": "user", "content": prompt}]
-    
-    # Define the ordered list of models to try, starting with the intent-specific model
-    models_to_try = [ANALYSIS_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != ANALYSIS_MODEL]
-
-    for model in models_to_try:
-        try:
-            logging.info(f"Attempting to use model: {model}")
-            response_text = openrouter_client.generate_text(
-                model=model,
-                messages=messages,
-                temperature=0.2,
-                max_tokens=4000,
-            )
-            logging.info(f"Successfully generated response with model: {model}")
-            return templates.TemplateResponse("index.html", {
-                "request": request,
-                "analysis_response": response_text,
-                "analysis_prompt": prompt
-            })
-        except Exception as e:
-            logging.error(f"Error occurred with model {model}: {e}")
-            if model == models_to_try[-1]:
-                logging.error("All model fallbacks failed. Raising final exception.")
-                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
-
-@app.post("/coding_help", response_class=HTMLResponse)
-async def coding_help_endpoint(request: Request, prompt: str = Form(...)):
-    # Corrected '===' to 'is' for Python syntax
-    if openrouter_client is None: 
-        raise HTTPException(status_code=500, detail="OpenRouterClient not initialized.")
-    messages = [{"role": "user", "content": prompt}]
-
-    # Define the ordered list of models to try, starting with the intent-specific model
-    models_to_try = [CODING_MODEL] + [m for m in ALL_FALLBACK_MODELS if m != CODING_MODEL]
-
-    for model in models_to_try:
-        try:
-            logging.info(f"Attempting to use model: {model}")
-            response_text = openrouter_client.generate_text(
-                model=model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=4000,
-            )
-            logging.info(f"Successfully generated response with model: {model}")
-            return templates.TemplateResponse("index.html", {
-                "request": request,
-                "coding_response": response_text,
-                "coding_prompt": prompt
-            })
-        except Exception as e:
-            logging.error(f"Error occurred with model {model}: {e}")
-            if model == models_to_try[-1]:
-                logging.error("All model fallbacks failed. Raising final exception.")
-                raise HTTPException(status_code=500, detail=f"All AI generation models failed: {str(e)}")
