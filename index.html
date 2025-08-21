@@ -7,212 +7,250 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
+        /*
+         * Soft Pastel and White Theme
+         * ---------------------------
+         * This theme uses a clean, bright aesthetic with white and cream backgrounds,
+         * a simple sans-serif font, and subtle pastel colors for highlights.
+         */
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
         html, body {
-            height: 100%; /* Ensure html and body take full viewport height */
-            width: 100%;  /* Ensure html and body take full width of parent (body) */
+            height: 100%;
+            width: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Prevent overall scrolling, internal sections will scroll */
+            overflow: hidden;
         }
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f0f2f5;
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f2f5; /* Light gray background */
+            color: #333; /* Dark gray for text */
             display: flex;
             justify-content: center;
             align-items: center;
-            /* Added for smoother text rendering */
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             text-rendering: optimizeLegibility;
-            font-weight: 500; /* Slightly bolder than regular, but not full bold */
+            font-weight: 400;
         }
         .chat-container {
             display: flex;
-            width: 100%; /* Take full width of parent (body) */
-            height: 100%; /* Take full height of parent (body) */
-            background-color: #ffffff;
-            border-radius: 0; /* Remove border-radius for full screen, or keep if desired for a floating look */
-            box-shadow: none; /* Remove shadow for full screen, or keep if desired */
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff; /* Main chat container is pure white */
+            border-radius: 0;
+            box-shadow: none;
             overflow: hidden;
         }
         .sidebar {
-            width: 250px;
-            background-color: #f8f9fa;
-            padding: 20px;
+            width: 280px;
+            background-color: #fefefe; /* Creamy white for the sidebar */
+            padding: 24px;
             display: flex;
             flex-direction: column;
-            border-right: 1px solid #e0e0e0;
-            flex-shrink: 0; /* Prevent sidebar from shrinking */
+            border-right: 1px solid #e0e0e0; /* Subtle light gray border */
+            flex-shrink: 0;
         }
         .main-content {
             flex-grow: 1;
             display: flex;
             flex-direction: column;
+            background-color: #ffffff; /* Pure white for main content area */
         }
         .chat-area {
             flex-grow: 1;
-            padding: 20px;
+            padding: 24px;
             overflow-y: auto;
-            background-color: #fdfdfd;
         }
         .message-input-area {
-            padding: 15px 20px;
+            padding: 20px 24px;
             border-top: 1px solid #e0e0e0;
             display: flex;
             align-items: center;
             background-color: #ffffff;
-            position: relative; /* For positioning file upload elements */
-            flex-shrink: 0; /* Prevent input area from shrinking */
+            position: relative;
+            flex-shrink: 0;
         }
         .message-input {
             flex-grow: 1;
-            border: 1px solid #d1d5db;
+            background-color: #f9f9f9; /* Off-white for input field */
+            color: #333;
+            border: 1px solid #e0e0e0;
             border-radius: 25px;
-            padding: 10px 15px;
+            padding: 12px 20px;
             outline: none;
             font-size: 1rem;
-            transition: border-color 0.3s ease;
-            min-height: 48px; /* Increased height for textarea */
-            resize: vertical; /* Allow vertical resizing */
-            line-height: 1.5; /* Better readability for multi-line text */
+            transition: box-shadow 0.3s ease;
+            min-height: 50px;
+            resize: none;
+            line-height: 1.5;
         }
         .message-input:focus {
-            border-color: #2563eb; /* Blue-600 */
+            border-color: #b0c4de; /* A soft blue */
+            box-shadow: 0 0 8px rgba(176, 196, 222, 0.5);
+        }
+        .message-input::placeholder {
+            color: #b0b0b0; /* Light gray placeholder text */
         }
         .send-button {
-            background-color: #2563eb; /* Blue-600 */
+            background-color: #87ceeb; /* Soft sky blue */
             color: white;
             border: none;
             border-radius: 25px;
-            padding: 10px 20px;
+            padding: 12px 24px;
             margin-left: 10px;
             cursor: pointer;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); /* Blue shadow */
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            font-weight: 600;
         }
         .send-button:hover {
-            background-color: #1d4ed8; /* Blue-700 */
-            transform: translateY(-1px);
+            background-color: #72b9d9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(135, 206, 235, 0.3);
         }
         .send-button:active {
             transform: translateY(1px);
         }
         .user-message {
-            background-color: #dbeafe; /* Blue-100 */
+            background-color: #f5f5f5; /* Light gray for user messages */
+            color: #333;
             align-self: flex-end;
-            padding: 10px 15px;
-            border-radius: 15px 15px 0 15px;
-            margin-bottom: 10px;
+            padding: 12px 18px;
+            border-radius: 20px 20px 0 20px;
+            margin-bottom: 15px;
             max-width: 70%;
             word-wrap: break-word;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            opacity: 0; /* Initial state for fade-in */
+            animation: fadeIn 0.5s forwards;
         }
         .ai-message {
-            background-color: #f1f5f9;
+            background-color: #e6e6fa; /* Soft lavender for AI messages */
+            color: #333;
             align-self: flex-start;
-            padding: 10px 15px;
-            border-radius: 15px 15px 15px 0;
-            margin-bottom: 10px;
+            padding: 12px 18px;
+            border-radius: 20px 20px 20px 0;
+            margin-bottom: 15px;
             max-width: 70%;
             word-wrap: break-word;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            opacity: 0; /* Initial state for fade-in */
+            animation: fadeIn 0.5s forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .sidebar-button {
             display: block;
             width: 100%;
-            padding: 12px 15px;
-            margin-bottom: 10px;
-            background-color: #dbeafe; /* Blue-100 */
-            color: #1d4ed8; /* Blue-700 */
+            padding: 14px 18px;
+            margin-bottom: 12px;
+            background-color: #f0f8ff; /* Soft light blue */
+            color: #444;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 1rem;
             cursor: pointer;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
             text-align: left;
         }
         .sidebar-button:hover {
-            background-color: #bfdbfe; /* Blue-200 */
+            background-color: #e0f0ff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
         .sidebar-button.active {
-            background-color: #2563eb; /* Blue-600 */
+            background-color: #87ceeb;
             color: white;
+            box-shadow: 0 4px 8px rgba(135, 206, 235, 0.3);
         }
         .logo {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: #2563eb; /* Blue-600 */
+            font-size: 2rem;
+            font-weight: 600;
+            color: #555;
             text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 15px;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
             border-bottom: 1px solid #e0e0e0;
         }
         .form-section {
-            display: none; /* Hidden by default */
-            padding: 20px;
+            display: none;
+            padding: 24px;
             border: 1px solid #e0e0e0;
-            border-radius: 10px;
-            margin-top: 20px;
+            border-radius: 12px;
+            margin: 20px;
             background-color: #ffffff;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            flex-grow: 1; /* Allow it to take available space */
-            overflow-y: auto; /* For scrollable content within sections */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            flex-grow: 1;
+            overflow-y: auto;
+            color: #333;
         }
         .form-section.active {
-            display: block;
-            display: flex; /* Use flexbox for canvas content */
+            display: flex;
             flex-direction: column;
         }
         .form-section h3 {
-            font-size: 1.5rem;
-            font-weight: bold;
+            font-size: 1.6rem;
+            font-weight: 600;
             color: #333;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .form-section p {
+            color: #555;
         }
         .form-section textarea {
             width: 100%;
-            min-height: 100px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            padding: 10px;
+            min-height: 120px;
+            background-color: #f9f9f9;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 12px;
             font-size: 1rem;
             margin-bottom: 15px;
             resize: vertical;
             outline: none;
-            transition: border-color 0.3s ease;
+            transition: box-shadow 0.3s ease;
         }
         .form-section textarea:focus {
-            border-color: #2563eb; /* Blue-600 */
+            border-color: #b0c4de;
+            box-shadow: 0 0 8px rgba(176, 196, 222, 0.5);
         }
         .form-section button {
-            background-color: #2563eb; /* Blue-600 */
+            background-color: #87ceeb;
             color: white;
             border: none;
-            border-radius: 8px;
-            padding: 10px 20px;
+            border-radius: 12px;
+            padding: 12px 24px;
             font-size: 1rem;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 2px 8px rgba(135, 206, 235, 0.2);
+            font-weight: 600;
         }
         .form-section button:hover {
-            background-color: #1d4ed8; /* Blue-700 */
+            background-color: #72b9d9;
+            box-shadow: 0 4px 12px rgba(135, 206, 235, 0.3);
         }
 
         /* Drag and Drop styles */
         .drop-area {
-            border: 2px dashed #a7a7a7;
-            border-radius: 10px;
-            padding: 20px;
+            border: 2px dashed #b0c4de;
+            border-radius: 12px;
+            padding: 24px;
             text-align: center;
-            color: #777;
+            color: #888;
             margin-bottom: 15px;
             transition: background-color 0.3s ease, border-color 0.3s ease;
         }
         .drop-area.highlight {
-            background-color: #e0e7ff;
-            border-color: #2563eb; /* Blue-600 */
+            background-color: #f0f8ff;
+            border-color: #b0c4de;
         }
         .file-upload-icon {
-            font-size: 2rem;
-            color: #2563eb; /* Blue-600 */
+            font-size: 2.2rem;
+            color: #b0c4de;
             margin-bottom: 10px;
         }
         .file-list {
@@ -221,21 +259,22 @@
             margin-top: 10px;
         }
         .file-list li {
-            background-color: #f1f5f9;
-            border-radius: 5px;
-            padding: 8px 12px;
-            margin-bottom: 5px;
+            background-color: #f9f9f9;
+            color: #555;
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
         .file-list .remove-file {
             background: none;
             border: none;
-            color: #ef4444;
+            color: #ff6347; /* Coral red for delete icon */
             cursor: pointer;
-            font-size: 1rem;
+            font-size: 1.1rem;
             padding: 0 5px;
         }
 
@@ -243,37 +282,39 @@
         .tools-container {
             position: relative;
         }
-        /* Adjusted button styles for icon-only */
         .icon-button {
-            background-color: #2563eb; /* Blue-600 */
-            color: white;
+            background-color: #f0f8ff;
+            color: #87ceeb;
             border: none;
-            border-radius: 25px;
-            padding: 10px 15px; /* Adjusted padding for icon-only */
+            border-radius: 50%;
+            padding: 0;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); /* Blue shadow */
-            width: 45px; /* Fixed width for circular appearance */
-            height: 45px; /* Fixed height for circular appearance */
-            flex-shrink: 0; /* Prevent shrinking */
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
         .icon-button:hover {
-            background-color: #1d4ed8; /* Blue-700 */
+            background-color: #e0f0ff;
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
         .tools-dropdown {
             position: absolute;
-            bottom: 60px; /* Position above the input */
+            bottom: 60px;
             left: 0;
             background-color: #ffffff;
-            border-radius: 10px;
+            border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-            min-width: 200px;
+            min-width: 220px;
             z-index: 1000;
-            display: none; /* Hidden by default */
+            display: none;
             padding: 10px 0;
+            border: 1px solid #e0e0e0;
         }
         .tools-dropdown.active {
             display: block;
@@ -281,11 +322,11 @@
         .tools-dropdown button {
             display: block;
             width: 100%;
-            padding: 10px 15px;
+            padding: 12px 18px;
             text-align: left;
             background: none;
             border: none;
-            color: #333;
+            color: #555;
             cursor: pointer;
             transition: background-color 0.2s ease;
         }
@@ -301,16 +342,16 @@
         }
         .canvas-code-editor textarea {
             flex-grow: 1;
-            min-height: 150px; /* Adjust as needed */
-            margin-bottom: 10px;
+            min-height: 150px;
+            margin-bottom: 12px;
         }
         .canvas-code-preview {
-            flex-grow: 2; /* Allow preview area to take more space */
-            border: 1px solid #d1d5db;
-            background-color: #fefefe;
-            border-radius: 8px;
-            overflow: hidden; /* Important for iframe */
-            position: relative; /* For absolute positioning of iframe */
+            flex-grow: 2;
+            border: 1px solid #e0e0e0;
+            background-color: #f9f9f9;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
         }
         .canvas-code-preview iframe {
             width: 100%;
@@ -330,17 +371,17 @@
 
         <main class="main-content">
             <div id="chat-view" class="chat-area flex flex-col">
-                <!-- Initial message will be added by JS based on history -->
+                <!-- Chat messages will be added here by JS -->
             </div>
 
             <div id="canvas-view" class="form-section">
                 <h3>Code Preview Canvas</h3>
-                <p>Paste your HTML, CSS, or JavaScript code below to preview it.</p>
+                <p class="text-gray-500 mb-4">Paste your HTML, CSS, or JavaScript code below to preview it.</p>
                 <div class="canvas-code-editor">
-                    <textarea id="canvasCodeInput" class="w-full border border-gray-300 rounded-md p-3 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Paste your HTML, CSS, or JavaScript code here."></textarea>
-                    <button id="runCanvasCodeButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300">Run Code</button>
+                    <textarea id="canvasCodeInput" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Paste your HTML, CSS, or JavaScript code here."></textarea>
+                    <button id="runCanvasCodeButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-300">Run Code</button>
                 </div>
-                <div id="canvasCodePreview" class="canvas-code-preview mt-4">
+                <div id="canvasCodePreview" class="canvas-code-preview mt-6">
                     <!-- Code preview will be rendered here in an iframe -->
                 </div>
             </div>
@@ -354,23 +395,23 @@
 
             <div id="settings-view" class="form-section">
                 <h3>Settings</h3>
-                <p>Adjust your preferences here.</p>
+                <p class="text-gray-500 mb-4">Adjust your preferences here.</p>
 
                 <div class="mt-4">
                     <h4 class="font-semibold text-gray-700 mb-2">Custom Instructions for Jarvina:</h4>
-                    <textarea id="customInstructions" class="w-full min-h-[120px] border border-gray-300 rounded-md p-3 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Tell Jarvina how you'd like it to respond. E.g., 'Always be concise', 'Use technical terms', 'Avoid jargon'."></textarea>
-                    <button id="saveCustomInstructions" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md shadow-md transition duration-300">Save Custom Instructions</button>
+                    <textarea id="customInstructions" class="w-full min-h-[120px] border border-gray-300 rounded-xl p-3 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Tell Jarvina how you'd like it to respond. E.g., 'Always be concise', 'Use technical terms', 'Avoid jargon'."></textarea>
+                    <button id="saveCustomInstructions" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-md transition duration-300">Save Custom Instructions</button>
                     <p id="customInstructionsStatus" class="text-sm mt-2 text-gray-600"></p>
                 </div>
             </div>
 
             <div class="message-input-area">
                 <input type="file" id="fileInput" multiple hidden>
-                <button id="fileUploadButton" class="icon-button mr-2">
+                <button id="fileUploadButton" class="icon-button mr-4">
                     <i class="fas fa-plus"></i>
                 </button>
 
-                <div class="tools-container mr-2">
+                <div class="tools-container mr-4">
                     <button id="toolsButton" class="icon-button">
                         <i class="fas fa-wrench"></i>
                     </button>
@@ -529,7 +570,7 @@
             console.log('showChat: New chat initiated. All history cleared from display and localStorage.');
             
             // Add the initial AI message for a new chat and save it to the *new* history
-            appendMessage('Hello Pranav, I am Jarvina your personal AI assistant. How can I assist you today?', 'ai-message', true);
+            appendMessage('Hello, I am Jarvina your personal ai assistant. How can i assist you today?', 'ai-message', true);
             userMessageInput.value = ''; // Also clear the input field
 
             document.getElementById('chat-view').classList.add('flex');
@@ -582,13 +623,12 @@
             console.log('DOMContentLoaded: Page loaded. Attempting to load chat history.');
             loadChatHistory(); // Load history from localStorage
 
-            // Populate the main chat area with loaded history or initial greeting
+            // Populate the main chat area with loaded history or a blank slate
             chatArea.innerHTML = ''; // Clear any initial static HTML greeting (like the one in your original code)
             if (chatHistory.length > 0) {
                 console.log('DOMContentLoaded: Populating chat area with loaded history.');
                 chatHistory.forEach(msg => {
                     // Append messages to chatArea without re-saving them to history
-                    // We pass 'false' for toHistory because these are already in chatHistory
                     const messageDiv = document.createElement('div');
                     messageDiv.className = `flex ${msg.senderClass === 'user-message' ? 'justify-end' : 'justify-start'}`;
                     const bubbleDiv = document.createElement('div');
@@ -599,9 +639,7 @@
                 });
                 chatArea.scrollTop = chatArea.scrollHeight;
             } else {
-                console.log('DOMContentLoaded: No history found, adding initial AI greeting and saving it.');
-                // Add the initial AI message and save it to the history
-                appendMessage('Hello Pranav, I am Jarvina your personal AI assistant. How can I assist you today?', 'ai-message', true);
+                console.log('DOMContentLoaded: No history found, starting with a blank chat.');
             }
             
             // Activate the chat view and its corresponding sidebar button
@@ -745,27 +783,28 @@
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                background-color: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                background-color: #ffffff;
+                color: #333;
+                padding: 24px;
+                border-radius: 12px;
+                box-shadow: 0 5px 20px rgba(0,0,0,0.15);
                 z-index: 9999;
                 text-align: center;
-                font-family: 'Inter', sans-serif;
-                color: #333;
+                font-family: 'Poppins', sans-serif;
+                border: 1px solid #e0e0e0;
             `;
             messageBox.innerHTML = `
                 <p>${message}</p>
                 <button style="
-                    background-color: #2563eb;
+                    background-color: #87ceeb;
                     color: white;
                     border: none;
-                    border-radius: 5px;
-                    padding: 8px 15px;
-                    margin-top: 15px;
+                    border-radius: 8px;
+                    padding: 10px 20px;
+                    margin-top: 20px;
                     cursor: pointer;
                     transition: background-color 0.3s ease;
-                " onmouseover="this.style.backgroundColor='#1d4ed8'" onmouseout="this.style.backgroundColor='#2563eb'">
+                " onmouseover="this.style.backgroundColor='#72b9d9'" onmouseout="this.style.backgroundColor='#87ceeb'">
                     OK
                 </button>
             `;
