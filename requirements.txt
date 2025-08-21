@@ -1,11 +1,9 @@
+fastapi
 uvicorn
-httpx
-jinja2
+httpx 
+jinja2 
 python-dotenv
 requests
 pydantic
-duckduckgo-search
-lxml
+google-generativeai
 python-multipart
-openrouter
-fastapi
